@@ -14,7 +14,7 @@ if __name__ == '__main__':
     train, val, test, name = get_NSAT_training_data("SAT-10-40")
 
     # REGULAR TRAINING
-    results = train_nsat(model, train, val, name, model_path="./trained_models/", epochs=args.epochs, lr=args.lr)
+    results = train_nsat(model, train, val, name, model_path="./trained_models/")
     print(results)
 
     # ADV. FINETUNING

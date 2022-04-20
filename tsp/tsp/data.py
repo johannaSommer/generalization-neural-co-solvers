@@ -4,9 +4,9 @@ from torch.utils.data import Dataset
     
     
 def get_DTSP_training_data():
-    train = TSPDataset('/TSP20/train')
-    val = TSPDataset('/TSP20/val')
-    test = TSPDataset('/TSP20/test')
+    train = TSPDataset('TSP20/train')
+    val = TSPDataset('TSP20/val')
+    test = TSPDataset('TSP20/test')
     return train, val, test, "DTSP-GEN"
 
 

@@ -15,9 +15,9 @@ This repository contains code snippets from the following repositories: </br>
 We thank the authors of these repositories for making their code public as well as the teams behind [_pysat_](https://github.com/pysathq/pysat), [_python-concorde_](https://github.com/jvkersch/pyconcorde) and [_seml_](https://github.com/TUM-DAML/seml) for their work on the respective packages.
 
 # Installation
-You can install all required packages and create a conda environment by running 
+You can install all required packages with
 ```bash
-conda create --name <env> --file requirements.txt
+pip install -r requirements.txt
 ```
 Please note that we use CUDA version 11.4 and PyTorch version 1.10. We can not guarantee that our code works out of the box with different CUDA/PyTorch versions. </br>
 
@@ -98,8 +98,8 @@ python tsp/scripts/train.py
 
 To run random / optimized attacks on a model, run:</br>
 ```bash
-python tsp/scripts/attacks.py 
-python tsp/scripts/attacks.py -opt
+python tsp/scripts/attack.py 
+python tsp/scripts/attack.py -opt
 ```
 You can add `-model_path /path/to/your/model.pt` to any of the attack script settings to specify a specific trained model.
 

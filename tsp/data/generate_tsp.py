@@ -4,7 +4,6 @@ import tempfile
 import sys, os, argparse, time, datetime
 import numpy as np
 import random
-from itertools import chain
 import networkx as nx
 from concorde.tsp import TSPSolver
 
@@ -12,7 +11,7 @@ from concorde.tsp import TSPSolver
 Entire file taken from https://github.com/machine-reasoning-ufrgs/TSP-GNN
 """
 
-def solve(Ma, Mw, nodes):
+def solve(Ma, Mw):
     """
         Invokes Concorde to solve a TSP instance
         Uses Python's Redirector library to prevent Concorde from printing
@@ -24,7 +23,7 @@ def solve(Ma, Mw, nodes):
     redirector_stderr = Redirector(fd=STDERR)
 
     # Write graph on a temporary file
-    write_graph(Ma,Mw,nodes,filepath='tmp',int_weights=True)
+    write_graph(Ma,Mw,filepath='tmp',int_weights=True)
     redirector_stderr.start()
     redirector_stdout.start()
     # Solve TSP on graph
@@ -69,7 +68,7 @@ def create_graph(n, connectivity, distances='euc_2D', metric=True):
     # Define weights
     nodes = None
     if distances == 'euc_2D':
-        # Select 'n' points in the 2/2 x 2/2 square uniformly at random
+        # Select 'n' points in the √2/2 × √2/2 square uniformly at random
         nodes = np.random.rand(n,2)
         for i in range(n):
             for j in range(i+1,n):
@@ -110,7 +109,7 @@ def create_graph(n, connectivity, distances='euc_2D', metric=True):
     #end
 
     # Solve
-    route = solve(Ma,Mw,nodes)
+    route = solve(Ma,Mw)
     if route is None:
         raise Exception('Unsolvable')
     #end
@@ -132,19 +131,20 @@ def create_dataset(path, nmin, nmax, conn_min=1, conn_max=1, samples=1000, dista
 
         # Create graph
         Ma,Mw,route,nodes = create_graph(n, np.random.uniform(conn_min,conn_max), distances=distances, metric=metric)
+
         # Write graph to file
-        write_graph(Ma,Mw,nodes, filepath="{}/{}.graph".format(path,i), route=route)
+        write_graph(Ma,Mw, filepath="{}/{}.graph".format(path,i), route=route)
 
         # Report progress
         if (i-1) % (samples//20) == 0:
             elapsed_time = time.time() - start_time
             remaining_time = (samples-i)*elapsed_time/(i+1)
-            print('Dataset creation {}% Complete. Remaining time at this rate: {}'.format(int(100*i/samples), str(datetime.timedelta(seconds=remaining_time))))
+            print('Dataset creation {}% Complete. Remaining time at this rate: {}'.format(int(100*i/samples), str(datetime.timedelta(seconds=remaining_time))), flush=True)
         #end
     #end
 #end
 
-def write_graph(Ma, Mw, nodes, filepath, route=None, int_weights=False, bins=10**6):
+def write_graph(Ma, Mw, filepath, route=None, int_weights=False, bins=10**6):
     with open(filepath,"w") as out:
 
         n, m = Ma.shape[0], len(np.nonzero(Ma)[0])
@@ -183,9 +183,6 @@ def write_graph(Ma, Mw, nodes, filepath, route=None, int_weights=False, bins=10*
             out.write('TOUR_SECTION:\n')
             out.write('{}\n'.format(' '.join([str(x) for x in route])))
         #end
-
-        out.write('NODE_POSITION:\n')
-        out.write('{}\n'.format(' '.join([str(x) for x in chain(*nodes)])))
 
         out.write('EOF\n')
     #end
@@ -287,7 +284,7 @@ if __name__ == '__main__':
     parser.add_argument('-seed', type=int, default=42, help='RNG seed for Python, Numpy and Tensorflow')
     parser.add_argument('-distances', default='euc_2D', help='What type of distances? (euc_2D or random)')
     parser.add_argument('--metric', const=False, default=True, action='store_const', help='Create metric instances?')
-    parser.add_argument('-samples', default=20, type=int, help='How many samples?')
+    parser.add_argument('-samples', default=2**10, type=int, help='How many samples?')
     parser.add_argument('-path', help='Save path', required=True)
     parser.add_argument('-nmin', default=20, type=int, help='Min. number of vertices')
     parser.add_argument('-nmax', default=40, type=int, help='Max. number of vertices')
@@ -298,7 +295,7 @@ if __name__ == '__main__':
     # Parse arguments from command line
     args = parser.parse_args()
 
-    print('Creating {} instances'.format(vars(args)['samples']))
+    print('Creating {} instances'.format(vars(args)['samples']), flush=True)
     create_dataset(
         vars(args)['path'],
         vars(args)['nmin'], vars(args)['nmax'],

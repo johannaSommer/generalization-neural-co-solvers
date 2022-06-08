@@ -30,7 +30,7 @@ class DTSP(torch.nn.Module):
         self.lstm_v = torch.nn.LSTM(dim, dim)
         self.lstm_e = torch.nn.LSTM(dim, dim)
 
-    def forward(self, batch):
+    def forward(self, batch, return_loss=False):
         EV = batch['EV'].to(self.device)
         E = self.init_mlp(torch.cat([batch['W'].to(self.device), batch['C'].to(self.device)], dim=1)).unsqueeze(0)
         V = torch.div(self.v_init.to(self.device), 
@@ -49,6 +49,10 @@ class DTSP(torch.nn.Module):
         votes = torch.split(votes, batch['n_edges'].tolist())
         votes = torch.cat([torch.mean(x).unsqueeze(0) for x in votes])
         
+        if return_loss:
+            loss_fn = torch.nn.BCEWithLogitsLoss(reduction="none")
+            loss = loss_fn(votes, batch['target'].cuda())
+            return votes, loss
         return votes
 
 

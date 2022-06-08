@@ -15,9 +15,9 @@ This repository contains code snippets from the following repositories: </br>
 We thank the authors of these repositories for making their code public as well as the teams behind [_pysat_](https://github.com/pysathq/pysat), [_python-concorde_](https://github.com/jvkersch/pyconcorde) and [_seml_](https://github.com/TUM-DAML/seml) for their work on the respective packages.
 
 # Installation
-You can install all required packages with
+You can install all required packages and create a conda environment by running 
 ```bash
-pip install -r requirements.txt
+conda create --name <env> --file requirements.txt
 ```
 Please note that we use CUDA version 11.4 and PyTorch version 1.10. We can not guarantee that our code works out of the box with different CUDA/PyTorch versions. </br>
 
@@ -93,13 +93,19 @@ python tsp/data/generate_tsp.py -path 'TSP/'
 
 To train a DecisionTSP model, run: </br>
 ```bash
-python tsp/scripts/train.py
+python tsp/scripts/train_dtsp.py
+```
+To train a ConvTSP model, run: </br>
+```bash
+python tsp/scripts/train_ctsp.py
 ```
 
 To run random / optimized attacks on a model, run:</br>
 ```bash
-python tsp/scripts/attack.py 
-python tsp/scripts/attack.py -opt
+python tsp/scripts/attack_dtsp.py 
+python tsp/scripts/attack_dtsp.py -opt
+python tsp/scripts/attack_ctsp.py 
+python tsp/scripts/attack_ctsp.py -opt
 ```
 You can add `-model_path /path/to/your/model.pt` to any of the attack script settings to specify a specific trained model.
 
@@ -111,5 +117,3 @@ You can refer to the data generation script `tsp/data/generate_tsp.py` and excha
 ### I want to integrate a different Neural TSP solver, what do I do?
 Similar to the SAT case, make sure that your model implements the functions `reconstruct` and `collate_fn`. The TSP attack operates on the coordinates of the TSP problem, which means that your collate function has to store the coordinates of each sample and your reconstruction functionality has to build a graph (plus possible features, labels, etc.) from these coordinates.
 
-### What about the ConvTSP model?
-This repository is currently WIP and we will add the ConvTSP model and attacks as soon as possible, latest by the ICLR 2022 conference.

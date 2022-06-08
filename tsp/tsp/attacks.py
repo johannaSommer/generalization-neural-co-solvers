@@ -34,7 +34,6 @@ def attack_opt(batch, model, steps=200, lr=0.001, sqrt=False, allowed_tries=50,
     n_subspaces -- max. number of nodes to add during attack
     """
     model.train()
-    loss_fn = nn.BCEWithLogitsLoss(reduction="none")
 
     # collect subspaces and keep track of instances where the route never meets the convex hull
     subspaces = []
@@ -51,10 +50,12 @@ def attack_opt(batch, model, steps=200, lr=0.001, sqrt=False, allowed_tries=50,
     # consider only samples where route passes convex hull
     coordinates = copy.deepcopy(batch['coords'])
     orig_routes = copy.deepcopy(batch['routes'])
+    if 'og_batch' in batch.keys():
+        batch = batch['og_batch']
 
     # init early stopping with clean instances
-    logits = model(batch)
-    best_loss = -loss_fn(logits, batch['target'].cuda())
+    logits, loss = model(batch, return_loss=True)
+    best_loss = -loss
     best_coos = [torch.empty((0, 2)) for _ in coordinates]
     best_point_found = torch.tensor([False for _ in range(sum([len(s[0]) for s in subspaces]))])
     best_point_found_for_route = torch.tensor([False for _ in range(len(coordinates))])
@@ -85,8 +86,8 @@ def attack_opt(batch, model, steps=200, lr=0.001, sqrt=False, allowed_tries=50,
         all_coords = [scale_coordinates(co.unsqueeze(0), sqrt=sqrt).squeeze(0) for co in all_coords]
 
         new_batch = model.reconstruct(all_coords, batch, routes)
-        logits = model(new_batch)
-        loss = -loss_fn(logits, new_batch['target'].cuda())
+        logits, loss = model(new_batch, return_loss=True)
+        loss = -loss
 
         # early stopping
         with torch.no_grad():

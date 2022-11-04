@@ -35,7 +35,7 @@ def val_tsp(net, val, pert="random", batch_size=20):
         else:
             raise NotImplementedError()    
         (x_edges, x_edges_values, x_nodes, x_nodes_coord, y_edges, y_nodes) = outs
-        y_preds, loss = net.forward(batch)
+        y_preds, loss = net.forward(outs)
 
         pred_tour_len, gt_tour_len = padded_get_stats(y_preds, batch)
         losses.extend(loss.tolist())

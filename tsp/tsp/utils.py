@@ -5,20 +5,16 @@ import torch.nn.functional as F
 
 
 def padded_get_stats(y_preds, batch):
-    x_edges, x_edges_values, x_nodes, x_nodes_coord, y_edges, y_nodes = unroll(batch)
-    x_edges = list(torch.split(x_edges, 1))
-    x_edges_values = list(torch.split(x_edges_values, 1))
-    x_nodes_coord = list(torch.split(x_nodes_coord, 1))
-    x_nodes = list(torch.split(x_nodes, 1))
-    y_edges = list(torch.split(y_edges, 1))
+    _, x_edges_values, _ = batch.edges, batch.edges_values, batch.edges_target
+    y_nodes = batch.nodes_target
     pred_tour_len, gt_tour_len = [], []
     for i in range(len(y_preds)):
-        bs_nodes = greedy_search(y_preds[i].unsqueeze(0))
+        bs_nodes = greedy_search(torch.tensor(y_preds[i]).unsqueeze(0))
         pred_tour_len.append(get_gt_tour(bs_nodes, x_edges_values[i]))
-        if len(y_nodes[i].shape) == 2:
-            gt_tour_len.append(get_gt_tour(y_nodes[i].long(), x_edges_values[i]))
+        if y_nodes[i].dim() == 2:
+            gt_tour_len.append(get_gt_tour(torch.tensor(y_nodes[i]).long(), x_edges_values[i]))
         else:
-            gt_tour_len.append(get_gt_tour(y_nodes[i].unsqueeze(0).long(), x_edges_values[i]))
+            gt_tour_len.append(get_gt_tour(torch.tensor(y_nodes[i]).unsqueeze(0).long(), x_edges_values[i]))
     return torch.cat(pred_tour_len), torch.cat(gt_tour_len)
 
 

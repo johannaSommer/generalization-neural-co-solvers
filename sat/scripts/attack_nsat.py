@@ -1,7 +1,7 @@
 import torch
-from sat.training import eval_nsat
+from train_nsat import eval_nsat
 from sat.solvers.neurosat import NeuroSAT
-from sat.data import get_NSAT_val_data
+from sat.data import get_SAT_val_data
 
 import argparse
 
@@ -17,9 +17,9 @@ if __name__ == '__main__':
     model = NeuroSAT().cuda()
     model.load_state_dict(torch.load(args.model_path))
     if args.type == "sat":
-        val = get_NSAT_val_data("SAT-10-40-true")
+        val = get_SAT_val_data("SAT-10-40-true")
     else:
-        val = get_NSAT_val_data("SAT-10-40-false")
+        val = get_SAT_val_data("SAT-10-40-false")
 
     attack_type = ("optimized-" if args.opt else "random-") + args.type
     res = eval_nsat(model, val, perturb=attack_type)

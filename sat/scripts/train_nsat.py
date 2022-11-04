@@ -11,13 +11,16 @@ from sklearn.metrics import accuracy_score
 from itertools import compress
 import pickle as pkl
 
+from sat.solvers.neurosat import NeuroSAT
+from sat.data import get_SAT_training_data
+import argparse
+
 
 def train_nsat(model, train, val, dataset_name, epochs=60, batch_size=32, lr=0.00002, 
                weight_decay=1e-10, augment="none", grad_clip=0.65, aug_rate=0.2,
                model_path='/trained_models/', adv_path=""):
     """
     Executes training and validation on the NeuroSAT model
-
     Keyword arguments:
     model -- SAT model
     train, val, test -- SAT data
@@ -86,7 +89,6 @@ def train_nsat(model, train, val, dataset_name, epochs=60, batch_size=32, lr=0.0
 def eval_nsat(model, val, perturb="clean", batch_size=32, **attackargs):
     """
     Executes training and validation on the NeuroSAT model
-
     Keyword arguments:
     model -- SAT model
     val -- SAT validation data
@@ -105,7 +107,7 @@ def eval_nsat(model, val, perturb="clean", batch_size=32, **attackargs):
     ts, ps, outs = torch.Tensor([]), torch.Tensor([]), torch.Tensor([])
 
     for _, batch in enumerate(dl_val):
-
+        print("starting attack")
         if perturb == "clean":
             sample_new = batch
 
@@ -138,6 +140,7 @@ def eval_nsat(model, val, perturb="clean", batch_size=32, **attackargs):
 
         outputs = model(sample_new)
         outputs = sigmoid(outputs)
+        print(outputs)
         target = sample_new['is_sat'].cpu()
         ts = torch.cat((ts, target.cpu()))
         outs = torch.cat((outs, outputs.flatten().detach().cpu()))
@@ -362,3 +365,23 @@ def check_block_adj(batch):
     components = torch.block_diag(*components)
     bdiag = torch.cat([components, components]).to(batch['adj'].device)
     return (torch.all(torch.eq(bdiag * batch['adj'], batch['adj'])))
+
+
+if __name__ == '__main__':
+
+    parser = argparse.ArgumentParser(description='Run training (and adversarial finetuning)')
+    parser.add_argument('-advtrain', default=False, action='store_true', help='Execute adversarial finetuning?')
+    args = parser.parse_args()
+
+    model = NeuroSAT()
+    model.cuda()
+    train, val, test, name = get_SAT_training_data("SAT-10-40")
+
+    # REGULAR TRAINING
+    results = train_nsat(model, train, val, name, model_path="../trained_models/")
+    print(results)
+
+    # ADV. FINETUNING
+    if args.advtrain:
+        results = train_nsat(model, train, val, name, model_path="../trained_models/", augment="adv", aug_rate=0.05, lr=0.00001)
+        print(results)

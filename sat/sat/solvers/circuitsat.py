@@ -1,8 +1,10 @@
 import torch
-import warnings
+import copy
 import torch_sparse
 import torch.nn as nn
 from torch_sparse import SparseTensor
+from sat.utils import sparse_blockdiag
+import numpy as np
 
 
 class MLP(nn.Module):
@@ -51,6 +53,57 @@ class CircuitSAT(nn.Module):
             _, h_state = self.backward_update(b_msg.unsqueeze(0), h_state)
             
         return self.classif(h_state.squeeze(0))
+
+    def collate_fn(self, problems):
+        is_sat, solution, n_vars, clauses = [], [], [], []
+        single_adjs, inds, fnames, fs = [], [], [], []
+        n_clauses = []
+        var_labels = []
+        for p in problems:
+            adj = p['c_adj']
+            single_adjs.append(adj)        
+            n_vars.append(p['n_vars'])
+            clauses.append(p['clauses'])
+            n_clauses.append(len(p['clauses']))
+            is_sat.append(float(p['label']))
+            inds.append(p['csat_ind'])
+            f = copy.deepcopy(p['csat_ind'][0])
+            f[f == 1] = 2
+            f[f == -1] = 3
+            f[p['n_vars']:p['n_vars']*2] = 1
+            fs.append(f)
+            if 'filename' in p.keys(): fnames.append(p['filename'])
+            if 'solution' in p.keys():
+                c = np.array(p['solution'])
+                c = c[c > 0] - 1
+                l = torch.zeros(p['n_vars'])
+                l[c] = 1 
+                var_labels.append(l)
+            else:
+                var_labels.append(torch.Tensor([-1]))
+        
+        adj = sparse_blockdiag(single_adjs)
+        indicators = torch.cat(fs).squeeze(0)
+        assert indicators.size(0) == adj.size(0) == adj.size(1)
+        feats = torch.zeros((indicators.size(0), 4))
+        feats = torch.scatter(feats, 1, indicators.long().unsqueeze(1), torch.ones(feats.shape))
+        assert torch.all(feats.sum(-1) == 1)
+
+        sample = {
+            'batch_size': len(problems),
+            'n_vars': torch.Tensor(n_vars).int(),
+            'is_sat': torch.Tensor(is_sat).float(),
+            'adj': adj,
+            'indicator': inds,
+            'clauses': clauses,
+            'solution': solution,
+            'fnames': fnames,
+            'features': feats,
+            'varlabel': var_labels,
+            'n_clauses': np.array(n_clauses)
+        }
+        return sample
+
 
 
 
@@ -114,3 +167,13 @@ def sparse_elem_mul(s1, s2):
     s1 = s1.to_torch_sparse_coo_tensor()
     s2 = s2.to_torch_sparse_coo_tensor()
     return SparseTensor.from_torch_sparse_coo_tensor(s1 * s2)
+
+
+def custom_csat_loss(outputs, k=10, mean=True):
+    # smooth step function
+    loss = (1 - outputs)**k / (((1 - outputs)**k) + outputs**k)
+    if mean:
+        return loss.mean()
+    else:
+        return loss
+

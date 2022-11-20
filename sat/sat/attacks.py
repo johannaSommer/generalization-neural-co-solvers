@@ -2,6 +2,7 @@ import math
 import copy
 import torch
 import numpy as np
+from sat.solvers.circuitsat import evaluate_circuit, custom_csat_loss
 
 
 def attack_random(a, model, batch, delta=0.01, deltaadc=1/4, counter=100, **args):
@@ -21,7 +22,11 @@ def attack_random(a, model, batch, delta=0.01, deltaadc=1/4, counter=100, **args
     nnodes = copy.deepcopy(batch['n_clauses'])
 
     if a == "sat":
-        misc_mask = torch.sigmoid(model(batch)) < 0.5
+        if model.name == "NSAT":
+            misc_mask = torch.sigmoid(model(batch)) < 0.5
+        else:
+            misc_mask = torch.ones(len(batch['n_clauses'])).bool()
+            misc_mask = misc_mask.to(batch['adj'].device())
     elif a == "del":
         misc_mask = torch.sigmoid(model(batch)) > 0.5
     else:
@@ -56,7 +61,6 @@ def attack_random(a, model, batch, delta=0.01, deltaadc=1/4, counter=100, **args
 
     repr = apply(a, repr, M, nnodes, batch, rem_zerocl=True)
     batch = model.reconstruct(repr, batch)
-    assert len(torch.unique(batch['adj'])) == 2
     batch['adj'] = batch['adj'].detach()
     return batch
 
@@ -83,7 +87,7 @@ def attack_opt(a, model, batch, steps=500, lr=0.1, delta=0.05, numsamples=20, te
     repr = model.get_representation(batch)
     repr_before = copy.deepcopy(repr)
     adj_mask, iterator, budget, M = get_inits(a, batch, delta, deltaadc, repr)
-    loss_fn = torch.nn.BCEWithLogitsLoss(reduction='none')
+    loss_fn = torch.nn.BCEWithLogitsLoss(reduction='none') if model.name == "NSAT" else csat_loss_wrapper
 
     # get edges that ensure satisfiability
     sat_mask = get_sat_mask(repr, batch)
@@ -102,7 +106,7 @@ def attack_opt(a, model, batch, steps=500, lr=0.1, delta=0.05, numsamples=20, te
         batch = model.reconstruct(repr, batch)
         outputs = model(batch)
         outputs = outputs / temp
-        loss = -loss_fn(outputs, batch['is_sat'])
+        loss = -loss_fn(outputs, batch['is_sat'] if model.name == "NSAT" else batch)
 
         # early stopping
         best_loss, best_M = update_best_pert(loss, best_loss, best_M, M, iterator)
@@ -115,6 +119,7 @@ def attack_opt(a, model, batch, steps=500, lr=0.1, delta=0.05, numsamples=20, te
 
         # Projections
         M = apply_projections(a, M, repr_before, sat_mask, adj_mask, iterator, budget)
+        batch['adj'] = batch['adj'].detach()
         
     # sample perturbation and apply
     with torch.no_grad():
@@ -135,7 +140,7 @@ def attack_opt(a, model, batch, steps=500, lr=0.1, delta=0.05, numsamples=20, te
             repr = apply(a, repr_before, M_sampled, nnodes, batch, rem_zerocl=True)
             batch = model.reconstruct(repr, batch)
             outputs = model(batch)
-            loss = -loss_fn(outputs, batch['is_sat'])
+            loss = -loss_fn(outputs, batch['is_sat'] if model.name == "NSAT" else batch)
             best_loss, best_M = update_best_pert(loss, best_loss, best_M, M_sampled, batch['n_clauses'])
         
     # apply best perturbation and prepare output
@@ -145,17 +150,25 @@ def attack_opt(a, model, batch, steps=500, lr=0.1, delta=0.05, numsamples=20, te
 
     assert torch.all(torch.eq(best_M, best_M * adj_mask))
     blocks = torch.block_diag(*[torch.ones(x, y) for (x, y) in zip(batch['n_vars'], batch['n_clauses'])])
-    adj_mask = torch.cat([blocks, blocks]).to(batch['adj'].device)
-    assert torch.all(torch.eq(batch['adj'], batch['adj'] * adj_mask))   
-    assert torch.all(batch['adj'] >= 0)
-    assert torch.all(batch['adj'] <= 1)
-    assert torch.all(torch.eq(batch['adj'], batch['adj'].int()))
-    assert len(torch.unique(batch['adj'])) == 2
+    
+    if model.name == "NSAT":
+        adj_mask = torch.cat([blocks, blocks]).to(batch['adj'].device)
+        assert torch.all(torch.eq(batch['adj'], batch['adj'] * adj_mask))   
+        assert torch.all(batch['adj'] >= 0)
+        assert torch.all(batch['adj'] <= 1)
+        assert torch.all(torch.eq(batch['adj'], batch['adj'].int()))
+        assert len(torch.unique(batch['adj'])) == 2
 
     if return_pert:
         return batch, best_M
     else:
         return batch
+
+
+def csat_loss_wrapper(outputs, batch, k=20):
+    outputs = evaluate_circuit(batch, torch.sigmoid(outputs), k)
+    loss = custom_csat_loss(outputs, mean=False)
+    return loss
 
 
 ######################
@@ -357,7 +370,7 @@ def get_inits(a, batch, delta, deltaadc, repr, mask=None):
         else:
             budget = torch.ceil(repr.sum() * delta * ((~mask).sum()/mask.size(0))).int()
         M = torch.zeros(repr.shape).to(repr.device)
-        adj_mask = [torch.ones(x*2, y) for (x, y) in zip(batch['n_vars'], batch['n_clauses'])]
+        adj_mask = [torch.ones(x*2, y) for (x, y) in zip(batch['n_vars'], batch['n_clauses'].int().tolist())]
         if mask is not None: 
             adj_mask = [torch.zeros_like(t) if mask[i] else t for (i, t) in enumerate(adj_mask)]
             M = M.flatten()

@@ -40,10 +40,10 @@ def get_SAT_val_data(name, random_state=42):
         return val
 
     elif name in ["gcol-large", "gcol-small", "random3sat", "uni3sat", "SAT-3-10", "SAT-50-100", "SAT-100-300"]:
-        data_names = os.listdir(DATA_PATH) / name
+        data_names = os.listdir(DATA_PATH / name)
         val_idx, _ = train_test_split(np.arange(len(data_names)), test_size=0.5, 
                                              random_state=random_state)
-        val = SATDataset(DATA_PATH, val_idx)
+        val = SATDataset(DATA_PATH / name, val_idx)
         return val
     else:
         raise NotImplementedError()  

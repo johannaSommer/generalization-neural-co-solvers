@@ -81,6 +81,7 @@ class CircuitSAT(nn.Module):
                 var_labels.append(l)
             else:
                 var_labels.append(torch.Tensor([-1]))
+            solution.append(p['solution'])
         
         adj = sparse_blockdiag(single_adjs)
         indicators = torch.cat(fs).squeeze(0)
@@ -100,11 +101,27 @@ class CircuitSAT(nn.Module):
             'fnames': fnames,
             'features': feats,
             'varlabel': var_labels,
-            'n_clauses': np.array(n_clauses)
+            'n_clauses': torch.Tensor(n_clauses).int()
         }
         return sample
 
+    def get_representation(self, batch):
+        all_inds = torch.cat(batch['indicator'], dim=1).squeeze()
+        literals = all_inds == 0
+        ors = all_inds == 1
+        repr = batch['adj'][literals, ors].to_dense()
+        return repr.cuda()
 
+    def reconstruct(self, repr, batch):
+        adj = batch['adj'].to_dense().to(repr.device)
+        all_inds = torch.cat(batch['indicator'], dim=1).squeeze()
+        literals = all_inds == 0
+        ors = all_inds == 1
+        temp = adj[literals]
+        temp[:, ors] = repr
+        adj[literals] = temp
+        batch['adj'] = SparseTensor.from_dense(adj)
+        return batch
 
 
 def evaluate_circuit(sample, emb, epoch, eps=1.2, hard=False):

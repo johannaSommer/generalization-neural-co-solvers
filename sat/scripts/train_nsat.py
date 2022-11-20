@@ -107,7 +107,7 @@ def eval_nsat(model, val, perturb="clean", batch_size=32, **attackargs):
     ts, ps, outs = torch.Tensor([]), torch.Tensor([]), torch.Tensor([])
 
     for _, batch in enumerate(dl_val):
-        print("starting attack")
+
         if perturb == "clean":
             sample_new = batch
 
@@ -140,7 +140,6 @@ def eval_nsat(model, val, perturb="clean", batch_size=32, **attackargs):
 
         outputs = model(sample_new)
         outputs = sigmoid(outputs)
-        print(outputs)
         target = sample_new['is_sat'].cpu()
         ts = torch.cat((ts, target.cpu()))
         outs = torch.cat((outs, outputs.flatten().detach().cpu()))

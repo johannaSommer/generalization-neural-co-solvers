@@ -5,11 +5,12 @@ import numpy as np
 from datetime import datetime
 from sat.data import SATDataset, get_SAT_training_data
 from sat.solvers.circuitsat import *
+from sat.attacks import attack_opt, attack_random
 from torch.utils.data.dataloader import DataLoader
 from sklearn.metrics import accuracy_score
 
 
-def train_nsat(model, train, val, dataset_name, epochs=60, batch_size=32, lr=0.00002, device="cuda",
+def train_csat(model, train, val, dataset_name, epochs=60, batch_size=32, lr=0.00002, device="cuda",
                weight_decay=1e-10, grad_clip=0.65, model_path="/trained_models/"):
     """
     Executes training and validation on the NeuroSAT model
@@ -45,13 +46,12 @@ def train_nsat(model, train, val, dataset_name, epochs=60, batch_size=32, lr=0.0
             loss = custom_csat_loss(outputs)
             loss_temp.append(loss.item())
             loss.backward()
-            print(loss)
             nn.utils.clip_grad_norm_(model.parameters(), grad_clip, norm_type=2.0)
             optim.step()
             
         train_losses.append(np.mean(np.array(loss_temp)).item())
         print("Train Epoch Loss", epoch, np.mean(np.array(loss_temp)).item(), flush=True)
-        val_acc = eval_nsat(model, val, model.collate_fn, batch_size=batch_size)
+        val_acc = eval_csat(model, val, batch_size=batch_size)
         print("Validation Accuracy", val_acc, flush=True)
         val_accs.append(val_acc)
         
@@ -66,14 +66,12 @@ def train_nsat(model, train, val, dataset_name, epochs=60, batch_size=32, lr=0.0
     return return_dict
 
 
-def eval_nsat(model, val, collate_fn, batch_size=32, **attackargs):
+def eval_csat(model, val, batch_size=32, perturb="clean", **attackargs):
     """
     Evaluates model on validation data
     """  
-    model.eval()
-
     if isinstance(val, SATDataset):
-        dl_val = DataLoader(dataset=val, collate_fn=collate_fn, pin_memory=False,
+        dl_val = DataLoader(dataset=val, collate_fn=model.collate_fn, pin_memory=False,
                             shuffle=False, batch_size=batch_size, num_workers=0)
     else:
         raise ValueError('Data is not provided as SAT Dataset.')
@@ -81,19 +79,35 @@ def eval_nsat(model, val, collate_fn, batch_size=32, **attackargs):
     ts, ps, outs = torch.Tensor([]), torch.Tensor([]), torch.Tensor([])
 
     for _, batch in enumerate(dl_val):
+
+        if perturb == "clean":
+            sample_new = batch
+
+        elif perturb == "random-sat":
+            assert torch.all(batch['is_sat'].bool())
+            sample_new = attack_random("sat", model, batch, **attackargs)
+
+        elif perturb == "optimized-sat":
+            assert torch.all(batch['is_sat'].bool())
+            sample_new = attack_opt("sat", model, batch, **attackargs) 
+
+        else:
+            raise ValueError("this kind of perturbation has not been implemented")
+
         with torch.no_grad():
             model.forward_update.flatten_parameters()
             model.backward_update.flatten_parameters()
-            batch['features'] = batch['features'].cuda()
-            batch['adj'] = batch['adj'].cuda()
-            outputs = model(batch)
+            sample_new['features'] = sample_new['features'].cuda()
+            sample_new['adj'] = sample_new['adj'].cuda()
+            outputs = model(sample_new)
             outputs = torch.sigmoid(outputs)
-            outputs = evaluate_circuit(batch, outputs, 1, hard=True)
+            outputs = evaluate_circuit(sample_new, outputs, 1, hard=True)
 
-        ts = torch.cat((ts, batch['is_sat']))
+        ts = torch.cat((ts, sample_new['is_sat']))
         outs = torch.cat((outs, outputs.flatten().detach().cpu()))
         preds = torch.where(outputs > 0.5, torch.ones(outputs.shape).cuda(), torch.zeros(outputs.shape).cuda())
         ps = torch.cat((ps, preds.flatten().cpu()))
+        print(accuracy_score(ts.numpy(), ps.numpy()))
 
     val_acc = accuracy_score(ts.numpy(), ps.numpy())
     return val_acc.item()
@@ -118,5 +132,5 @@ if __name__ == '__main__':
     model.cuda()
     train, val, test, name = get_SAT_training_data("SAT-3-10")
 
-    results = train_nsat(model, train, val, name, model_path="../trained_models/")
+    results = train_csat(model, train, val, name, model_path="../trained_models/")
     print(results)

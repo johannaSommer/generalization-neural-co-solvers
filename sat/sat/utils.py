@@ -1,9 +1,6 @@
-import os
 import torch
-import pickle as pkl
-import numpy as np
-from itertools import compress
-from pysat.solvers import Glucose3
+from torch_sparse import SparseTensor
+# from pysat.solvers import Glucose3
 
 
 def check_block_adj(batch):
@@ -71,3 +68,24 @@ def get_nsat_blocks(b):
         cvars += b['n_vars'][i]
         cclauses += b['n_clauses'][i]
     return pos, neg
+
+
+def sparse_blockdiag(single_adjs, square=True):
+    single_adjs = [(sa.coo(), sa.size(0), sa.size(1)) for sa in single_adjs]
+    values = torch.cat([sa[0][2] for sa in single_adjs])
+    indices = []
+    counter = 0
+    sec_counter = 0
+    for sa in single_adjs:
+        if square:
+            indices.append(torch.stack((sa[0][0], sa[0][1])) + counter)
+        else:
+            indices.append(torch.stack((sa[0][0] + counter, sa[0][1] + sec_counter)))
+        counter += sa[1]
+        sec_counter += sa[2]
+    indices = torch.cat(indices, dim=1)
+    if square: assert counter == sec_counter
+    adj = torch.sparse_coo_tensor(indices, values, [counter, sec_counter])
+    adj = SparseTensor.from_torch_sparse_coo_tensor(adj)
+    return adj
+

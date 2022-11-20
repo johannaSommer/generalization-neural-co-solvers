@@ -1,3 +1,6 @@
+
+**New Feature!** We have now added an unofficial reimplementation of [CircuitSAT](https://openreview.net/forum?id=BJxgz2R9t7) by Amizadeh et al. to our repository, including training and evaluation with the **SAT attacks**.
+
 # Generalization of Neural Combinatorial Solvers Through the Lens of Adversarial Robustness
 
 # Repository Information

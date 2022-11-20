@@ -1,6 +1,7 @@
 import random
 import torch
 import numpy as np
+import torch_sparse
 from pysat.solvers import Minisat22
 
 
@@ -56,4 +57,38 @@ def gen_iclause_pair(n, p_k_2, p_geo):
     iclause_unsat = iclause
     iclause_sat = [- iclause_unsat[0] ] + iclause_unsat[1:]
     return n, iclauses, iclause_unsat, iclause_sat
+
+def make_csat_batch(iclauses, n_vars):
+    out_dict = ()
+    out_dict = dict()
+    out_dict['clauses'] = iclauses
+    out_dict['n_clauses'] = len(iclauses)
+    out_dict['n_vars'] = n_vars
+    out_dict['label'], out_dict['solution'] = solve_sat(n_vars, iclauses)
+    assert out_dict['label']
+    
+    # construct adjacency for nsat model
+    out_dict['c_adj'], out_dict['csat_ind'] = cnf_to_csat(iclauses, n_vars)
+    out_dict['c_adj'] = torch_sparse.SparseTensor.from_dense(out_dict['c_adj'])
+    return out_dict
+
+def cnf_to_csat(cnf, nv):
+    adj = torch.zeros(nv*2, nv*2)
+    idx = torch.arange(nv*2).view(2, -1).T
+    for (i, j) in idx:
+        adj[i, j] = 1
+    t_cnf = [[abs(l)+nv if l < 0 else l for l in c] for c in cnf]
+    indicator = torch.zeros(1, adj.size(0))
+    for i, c in enumerate(t_cnf):
+        adj = torch.nn.functional.pad(adj, (0, 1, 0, 1))
+        for l in c:
+            adj[l-1, -1] = 1
+        indicator = torch.nn.functional.pad(indicator, (0, 1), value=1)
+        t_cnf[i] = adj.size(0)
+
+    adj = torch.nn.functional.pad(adj, (0, 1, 0, 1))
+    indicator = torch.nn.functional.pad(indicator, (0, 1), value=-1)
+    for l in t_cnf:
+        adj[l-1, -1] = 1
+    return adj, indicator
     
